@@ -37,7 +37,7 @@ pub enum ColumnType {
     LongBlob,
     Blob(u8),
     VarString,
-    MyString,
+    CharString(u8),
     Geometry(u8),
     Json(u8),
 }
@@ -73,7 +73,7 @@ impl ColumnType {
             251 => ColumnType::LongBlob,   // docs say this can't occur
             252 => ColumnType::Blob(0),
             253 => ColumnType::VarString, // not implemented
-            254 => ColumnType::MyString,
+            254 => ColumnType::CharString(0),
             255 => ColumnType::Geometry(0), // not implemented
             i => unimplemented!("unhandled column type {}", i),
         }
@@ -108,7 +108,7 @@ impl ColumnType {
                 let num_decimals = cursor.read_u8()?;
                 ColumnType::NewDecimal(precision, num_decimals)
             }
-            ColumnType::VarString | ColumnType::MyString => {
+            ColumnType::VarString => {
                 let f1 = cursor.read_u8()?;
                 let f2 = cursor.read_u8()?;
                 let real_type = f1;
@@ -119,6 +119,10 @@ impl ColumnType {
                     ColumnType::Enum(_) => ColumnType::Enum(real_size),
                     i => unimplemented!("unimplemented stringy type {:?}", i),
                 }
+            }
+            ColumnType::CharString(_) => {
+                let size = cursor.read_u8()?;
+                ColumnType::CharString(size)
             }
             ColumnType::Enum(_) => {
                 let pack_length = cursor.read_u16::<LittleEndian>()?;
@@ -157,6 +161,10 @@ impl ColumnType {
                 } else {
                     read_one_byte_length_prefixed_string(r)?
                 };
+                Ok(MySQLValue::String(value))
+            }
+            &ColumnType::CharString(_) => {
+                let value = read_one_byte_length_prefixed_string(r)?;
                 Ok(MySQLValue::String(value))
             }
             &ColumnType::Year => Ok(MySQLValue::Year(u32::from(r.read_u8()?) + 1900)),
@@ -306,8 +314,7 @@ impl ColumnType {
             &ColumnType::TinyBlob
             | &ColumnType::MediumBlob
             | &ColumnType::LongBlob
-            | &ColumnType::VarString
-            | &ColumnType::MyString => {
+            | &ColumnType::VarString => {
                 // the manual promises that these are never present in binlogs and are
                 // not implemented by MySQL
                 Err(ColumnParseError::UnimplementedTypeError {

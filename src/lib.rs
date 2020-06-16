@@ -11,7 +11,7 @@
 //!
 //! ```no_run
 //! fn main() {
-//!     for event in mysql_binlog::parse_file("bin-log.000001").unwrap() {
+//!     for event in mysql_binlog::parse_file("bin-log.000001", None).unwrap() {
 //!         println!("{:?}", event.unwrap());
 //!     }
 //! }
@@ -72,6 +72,8 @@ pub struct BinlogEvent {
     pub timestamp: u32,
     pub gtid: Option<Gtid>,
     pub logical_timestamp: Option<LogicalTimestamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -143,7 +145,7 @@ impl<BR: Read + Seek> Iterator for EventIterator<BR> {
                         self.table_map
                             .handle(table_id, schema_name, table_name, columns);
                     }
-                    EventData::QueryEvent { query, .. } => {
+                    EventData::QueryEvent { query, schema, .. } => {
                         return Some(Ok(BinlogEvent {
                             offset,
                             type_code: event.type_code(),
@@ -151,6 +153,7 @@ impl<BR: Read + Seek> Iterator for EventIterator<BR> {
                             gtid: self.current_gtid,
                             logical_timestamp: self.logical_timestamp,
                             table_name: None,
+                            schema: Some(schema),
                             schema_name: None,
                             rows: Vec::new(),
                             query: Some(query),
@@ -168,6 +171,7 @@ impl<BR: Read + Seek> Iterator for EventIterator<BR> {
                             logical_timestamp: self.logical_timestamp,
                             table_name: maybe_table.as_ref().map(|a| a.table_name.to_owned()),
                             schema_name: maybe_table.as_ref().map(|a| a.schema_name.to_owned()),
+                            schema: None,
                             rows,
                             query: None,
                         };
@@ -196,11 +200,14 @@ pub struct BinlogFileParserBuilder<BR: Read + Seek> {
 
 impl BinlogFileParserBuilder<File> {
     /// Construct a new BinlogFileParserBuilder from some path
-    pub fn try_from_path<P: AsRef<Path>>(file_name: P) -> Result<Self, BinlogParseError> {
+    pub fn try_from_path<P: AsRef<Path>>(
+        file_name: P,
+        start_position: Option<u64>,
+    ) -> Result<Self, BinlogParseError> {
         let bf = binlog_file::BinlogFile::try_from_path(file_name.as_ref())?;
         Ok(BinlogFileParserBuilder {
             bf: bf,
-            start_position: None,
+            start_position: start_position,
         })
     }
 }
@@ -245,8 +252,11 @@ pub fn parse_reader<R: Read + Seek + 'static>(r: R) -> Result<EventIterator<R>, 
 ///
 /// - returns an immediate error if the file could not be opened or if it does not contain a valid Format Desciptor Event
 /// - each call to the iterator can return an error if there is an I/O or parsing error
-pub fn parse_file<P: AsRef<Path>>(file_name: P) -> Result<EventIterator<File>, BinlogParseError> {
-    BinlogFileParserBuilder::try_from_path(file_name).map(|b| b.build())
+pub fn parse_file<P: AsRef<Path>>(
+    file_name: P,
+    start_position: Option<u64>,
+) -> Result<EventIterator<File>, BinlogParseError> {
+    BinlogFileParserBuilder::try_from_path(file_name, start_position).map(|b| b.build())
 }
 
 #[cfg(test)]
@@ -261,7 +271,7 @@ mod tests {
 
     #[test]
     fn test_parse_file() {
-        let results = parse_file("test_data/bin-log.000001")
+        let results = parse_file("test_data/bin-log.000001", None)
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
             .unwrap();

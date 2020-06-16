@@ -31,6 +31,7 @@ impl Serialize for Blob {
 #[derive(Debug, Serialize)]
 /// Normalized representation of types which are present in MySQL
 pub enum MySQLValue {
+    UnsignedInteger(u8),
     SignedInteger(i64),
     Float(f32),
     Double(f64),
