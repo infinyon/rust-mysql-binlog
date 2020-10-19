@@ -156,6 +156,7 @@ impl ColumnType {
             }
             &ColumnType::Null => Ok(MySQLValue::Null),
             &ColumnType::VarChar(max_len) => {
+                println!("{:?}", max_len);
                 let value = if max_len > 255 {
                     read_two_byte_length_prefixed_string(r)?
                 } else {

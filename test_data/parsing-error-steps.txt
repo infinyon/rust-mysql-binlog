@@ -1,0 +1,26 @@
+SQL to generate Binlog file
+===========================
+CREATE DATABASE flvDb;
+CREATE TABLE pet (name VARCHAR(20), owner VARCHAR(20), species VARCHAR(20), sex CHAR(1), birth DATE, color VARCHAR(20));
+INSERT INTO pet VALUES ('Puffball','Diane','hamster','f','1999-03-30', 'White');
+
+File has been generated:
+bin-log.000001
+
+Run Tests
+=========
+> cargo test test_parse_reader -- --nocapture
+
+Error
+======
+parsing column 0 (VarChar(80))
+80
+parsing column 1 (VarChar(80))
+80
+parsing column 2 (VarChar(80))
+80
+parsing column 3 (CharString(254))
+parsing column 4 (Date)
+parsing column 5 (VarChar(20484))
+20484
+thread 'tests::test_parse_reader' panicked at 'called `Result::unwrap()` on an `Err` value: ColumnParseError(Io(Custom { kind: UnexpectedEof, error: "failed to fill whole buffer" }))', src/lib.rs:309:14
